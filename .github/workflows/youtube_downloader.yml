@@ -74,10 +74,18 @@ jobs:
           FMT  = os.environ.get('INPUT_FORMAT')
           QUAL = os.environ.get('INPUT_QUALITY')
 
-          # Validate URL
+          # Validate URL first
           if not URL:
               print("::error::Video URL is empty")
               sys.exit(1)
+
+          # Validate YouTube URL format BEFORE API call
+          match = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', URL)
+          if not match:
+              print(f"::error::Invalid YouTube URL format: {URL}")
+              sys.exit(1)
+
+          vid = match.group(1)
 
           is_audio = FMT == 'mp3'
           if is_audio:
@@ -111,10 +119,15 @@ jobs:
           title = data.get('title', 'video')
 
           dl_url = None
-          for _ in range(150):
+          for attempt in range(150):
               time.sleep(2)
-              r = s.get(status_url, timeout=20)
-              status = r.json()
+              try:
+                  r = s.get(status_url, timeout=20)
+                  status = r.json()
+              except Exception as e:
+                  print(f"::error::Invalid server response on attempt {attempt + 1}: {str(e)}")
+                  sys.exit(1)
+
               if status.get('status') == 'completed':
                   dl_url = status.get('downloadUrl')
                   break
@@ -123,13 +136,21 @@ jobs:
                   sys.exit(1)
 
           if not dl_url:
-              print("::error::Could not get download link")
+              print("::error::Could not get download link after 5 minutes")
               sys.exit(1)
 
-          # Validate YouTube URL format
-          match = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', URL)
-          if not match:
-              print(f"::error::Invalid YouTube URL format: {URL}")
+          clean = re.sub(r'[^a-zA-Z0-9\-_()\[\]]', '_', title.replace(' ', '_'))
+          clean = re.sub(r'_+', '_', clean).strip('_')[:70] or vid
+          clean = clean.lstrip('-')
+          fname = f"{clean}_{vid}_{QUAL}.{FMT}"
+
+          with open(".download_info", "w", encoding="utf-8") as f:
+              f.write(f"{dl_url}\n{fname}\n{title}")
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"filename={fname}\n")
+              f.write(f"title={title}\n")
+          EOF
               sys.exit(1)
 
           vid   = match.group(1)
