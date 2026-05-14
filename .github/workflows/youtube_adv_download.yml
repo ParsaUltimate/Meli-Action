@@ -200,12 +200,16 @@ jobs:
 
           # Cookie handling: prefer inline input, fallback to YT_COOKIES secret
           COOKIE_ARGS=""
-          if [ -n "${INPUT_COOKIES}" ] || [ -n "${COOKIES}" ]; then
-            printf '%s' "${INPUT_COOKIES}${COOKIES}" > /tmp/cookies.txt
+          if [ -n "$COOKIES_INPUT" ]; then
+            echo "Using cookies from workflow input"
+            printf '%s' "$COOKIES_INPUT" > /tmp/cookies.txt
             COOKIE_ARGS="--cookies /tmp/cookies.txt"
-          elif [ -n "$SECRET_YT_COOKIES" ]; then
-            printf '%s' "$SECRET_YT_COOKIES" > /tmp/cookies.txt
+          elif [ -n "$YT_COOKIES_SECRET" ]; then
+            echo "Using cookies from YT_COOKIES secret"
+            printf '%s' "$YT_COOKIES_SECRET" > /tmp/cookies.txt
             COOKIE_ARGS="--cookies /tmp/cookies.txt"
+          else
+            echo "Warning: No cookies provided. This may fail for age-restricted or geo-blocked content."
           fi
 
           # Extract numeric height from quality string (e.g. "2160 (4K)" -> "2160")
@@ -300,8 +304,8 @@ jobs:
             $EXTRA_ARGS \
             "$URL"
         env:
-          INPUT_COOKIES: ${{ github.event.inputs.cookies }}
-          SECRET_YT_COOKIES: ${{ secrets.YT_COOKIES }}
+          COOKIES_INPUT: ${{ github.event.inputs.cookies }}
+          YT_COOKIES_SECRET: ${{ secrets.YT_COOKIES }}
 
       - name: Split oversized files (optional)
         run: |
