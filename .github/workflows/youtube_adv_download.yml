@@ -200,8 +200,8 @@ jobs:
 
           # Cookie handling: prefer inline input, fallback to YT_COOKIES secret
           COOKIE_ARGS=""
-          if [ -n "$INPUT_COOKIES" ]; then
-            printf '%s' "$INPUT_COOKIES" > /tmp/cookies.txt
+          if [ -n "${INPUT_COOKIES}" ] || [ -n "${COOKIES}" ]; then
+            printf '%s' "${INPUT_COOKIES}${COOKIES}" > /tmp/cookies.txt
             COOKIE_ARGS="--cookies /tmp/cookies.txt"
           elif [ -n "$SECRET_YT_COOKIES" ]; then
             printf '%s' "$SECRET_YT_COOKIES" > /tmp/cookies.txt
