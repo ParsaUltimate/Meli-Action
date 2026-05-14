@@ -117,7 +117,11 @@ jobs:
               print("::error::Could not get download link")
               sys.exit(1)
 
-          vid   = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', URL)[1]
+          match = re.search(r'(?:v=|youtu\.be/|shorts/)([a-zA-Z0-9_-]{11})', URL)
+          if not match:
+              print("::error::Invalid YouTube URL format. Use: youtube.com/watch?v=... or youtube.com/shorts/... or youtu.be/...")
+              sys.exit(1)
+          vid = match[1]
           clean = re.sub(r'[^a-zA-Z0-9\-_()\[\]]', '_', title.replace(' ', '_'))
           clean = re.sub(r'_+', '_', clean).strip('_')[:70] or vid
           clean = clean.lstrip('-')
