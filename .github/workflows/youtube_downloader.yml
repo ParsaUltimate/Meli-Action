@@ -74,19 +74,6 @@ jobs:
           FMT  = os.environ.get('INPUT_FORMAT')
           QUAL = os.environ.get('INPUT_QUALITY')
 
-          # Validate URL first
-          if not URL:
-              print("::error::Video URL is empty")
-              sys.exit(1)
-
-          # Validate YouTube URL format BEFORE API call
-          match = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', URL)
-          if not match:
-              print(f"::error::Invalid YouTube URL format: {URL}")
-              sys.exit(1)
-
-          vid = match.group(1)
-
           is_audio = FMT == 'mp3'
           if is_audio:
               QUAL = QUAL if QUAL in ('64kbps','128kbps','192kbps','320kbps') else '192kbps'
@@ -115,7 +102,7 @@ jobs:
           if not status_url:
               print("::error::Server did not provide a status URL")
               sys.exit(1)
-
+          
           title = data.get('title', 'video')
 
           dl_url = None
@@ -127,7 +114,7 @@ jobs:
               except Exception as e:
                   print(f"::error::Invalid server response on attempt {attempt + 1}: {str(e)}")
                   sys.exit(1)
-
+          
               if status.get('status') == 'completed':
                   dl_url = status.get('downloadUrl')
                   break
@@ -139,21 +126,12 @@ jobs:
               print("::error::Could not get download link after 5 minutes")
               sys.exit(1)
 
-          clean = re.sub(r'[^a-zA-Z0-9\-_()\[\]]', '_', title.replace(' ', '_'))
-          clean = re.sub(r'_+', '_', clean).strip('_')[:70] or vid
-          clean = clean.lstrip('-')
-          fname = f"{clean}_{vid}_{QUAL}.{FMT}"
-
-          with open(".download_info", "w", encoding="utf-8") as f:
-              f.write(f"{dl_url}\n{fname}\n{title}")
-
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"filename={fname}\n")
-              f.write(f"title={title}\n")
-          EOF
+          match = re.search(r'(?:v=|youtu\.be/|shorts/)([a-zA-Z0-9_-]{11})', URL)
+          if not match:
+              print(f"::error::Invalid YouTube URL format: {URL}")
               sys.exit(1)
-
-          vid   = match.group(1)
+          
+          vid = match.group(1)
           clean = re.sub(r'[^a-zA-Z0-9\-_()\[\]]', '_', title.replace(' ', '_'))
           clean = re.sub(r'_+', '_', clean).strip('_')[:70] or vid
           clean = clean.lstrip('-')
