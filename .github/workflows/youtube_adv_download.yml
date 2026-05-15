@@ -302,7 +302,7 @@ jobs:
             $COOKIE_ARGS \
             -o "$OUTPUT_FOLDER/%(title)s [%(id)s].%(ext)s" \
             $EXTRA_ARGS \
-            "$URL"
+            -- "$URL"
         env:
           COOKIES_INPUT: ${{ github.event.inputs.cookies }}
           YT_COOKIES_SECRET: ${{ secrets.YT_COOKIES }}
