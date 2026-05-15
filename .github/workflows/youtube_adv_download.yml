@@ -1,6 +1,5 @@
 name: دانلودر یوتیوب پیشرفته
 
-
 on:
   workflow_dispatch:
     inputs:
@@ -8,7 +7,6 @@ on:
         description: 'YouTube URL (video or playlist)'
         required: true
         type: string
-
       output_format:
         description: 'Output format'
         required: true
@@ -18,7 +16,6 @@ on:
           - mp3 (audio only)
           - best (auto)
         default: 'mp4 (video)'
-
       video_quality:
         description: 'Max video resolution to download'
         required: false
@@ -32,7 +29,6 @@ on:
           - '144'
           - 'best'
         default: '1080 (Full HD)'
-
       audio_quality:
         description: 'Audio bitrate — applies to MP3 downloads'
         required: false
@@ -43,7 +39,6 @@ on:
           - '128'
           - '64'
         default: '192'
-
       video_codec:
         description: 'Preferred video codec (ignored for audio-only)'
         required: false
@@ -54,9 +49,8 @@ on:
           - 'vp9'
           - 'av1'
         default: 'any (auto)'
-
       concurrent_fragments:
-        description: 'Parallel download fragments — more = faster but higher bandwidth'
+        description: 'Parallel download fragments'
         required: false
         type: choice
         options:
@@ -65,82 +59,62 @@ on:
           - '16'
           - '1'
         default: '4'
-
       sponsorblock:
         description: 'Skip sponsor / intro / outro segments via SponsorBlock'
         required: false
         type: boolean
         default: false
-
       embed_chapters:
         description: 'Embed chapter markers into the output file'
         required: false
         type: boolean
         default: true
-
       write_description:
         description: 'Save video description as a .description text file'
         required: false
         type: boolean
         default: false
-
       trim_start:
-        description: 'Trim start timestamp (e.g. 0:33 or 1:22:10) — leave empty to skip'
+        description: 'Trim start timestamp (e.g. 0:33 or 1:22:10)'
         required: false
         type: string
-
       trim_end:
-        description: 'Trim end timestamp (e.g. 1:22 or 2:00:00) — leave empty to skip'
+        description: 'Trim end timestamp (e.g. 1:22 or 2:00:00)'
         required: false
         type: string
-
       playlist_items:
-        description: |
-          Playlist items to download:
-          Leave empty = single video only
-          all = full playlist
-          3-7 = items 3 through 7
-          1,3,5 = specific items
+        description: 'Playlist items to download (empty=single, all=full, 3-7=range, 1,3,5=specific)'
         required: false
         type: string
-
       cookies:
-        description: |
-          Cookie string (Netscape format) to bypass geo/age restrictions.
-          Safer alternative: store as a repo secret named YT_COOKIES — used automatically.
+        description: 'Cookie string (Netscape format) or use YT_COOKIES secret'
         required: false
         type: string
-
       download_subtitles:
         description: 'Download subtitle files'
         required: false
         type: boolean
         default: false
-
       subtitle_langs:
         description: 'Subtitle languages, comma-separated (e.g. en,fa)'
         required: false
         type: string
         default: 'en'
-
       embed_metadata:
         description: 'Embed thumbnail and metadata into the output file'
         required: false
         type: boolean
         default: true
-
       max_part_mb:
         description: 'Maximum part size in MB for splitting (0 = no split)'
         required: false
         type: number
         default: 90
-
       output_folder:
         description: 'Folder to store downloads (relative to repo root)'
         required: false
         type: string
         default: 'downloads'
-
       extra_args:
         description: 'Extra yt-dlp arguments (advanced users)'
         required: false
@@ -178,131 +152,74 @@ jobs:
 
       - name: Download media
         run: |
-          URL="${{ github.event.inputs.video_url }}"
-          FORMAT_INPUT="${{ github.event.inputs.output_format }}"
-          VIDEO_QUALITY="${{ github.event.inputs.video_quality }}"
-          AUDIO_Q="${{ github.event.inputs.audio_quality }}"
-          CODEC="${{ github.event.inputs.video_codec }}"
-          FRAGMENTS="${{ github.event.inputs.concurrent_fragments }}"
+          set -e
+          
+          VIDEO_URL="${{ github.event.inputs.video_url }}"
           OUTPUT_FOLDER="${{ github.event.inputs.output_folder }}"
-          TRIM_START="${{ github.event.inputs.trim_start }}"
-          TRIM_END="${{ github.event.inputs.trim_end }}"
-          PLAYLIST_ITEMS="${{ github.event.inputs.playlist_items }}"
-          SUBTITLES="${{ github.event.inputs.download_subtitles }}"
-          SUB_LANGS="${{ github.event.inputs.subtitle_langs }}"
-          EMBED_META="${{ github.event.inputs.embed_metadata }}"
-          EMBED_CHAPTERS="${{ github.event.inputs.embed_chapters }}"
-          SPONSORBLOCK="${{ github.event.inputs.sponsorblock }}"
-          WRITE_DESC="${{ github.event.inputs.write_description }}"
-          EXTRA_ARGS="${{ github.event.inputs.extra_args }}"
-
+          
+          echo "URL: $VIDEO_URL"
+          echo "Output folder: $OUTPUT_FOLDER"
+          
           mkdir -p "$OUTPUT_FOLDER"
-
-          # Cookie handling: prefer inline input, fallback to YT_COOKIES secret
-          COOKIE_ARGS=""
+          
+          # Handle cookies
+          COOKIE_FILE=""
           if [ -n "$COOKIES_INPUT" ]; then
-            echo "Using cookies from workflow input"
+            echo "Using cookies from input"
             printf '%s' "$COOKIES_INPUT" > /tmp/cookies.txt
-            COOKIE_ARGS="--cookies /tmp/cookies.txt"
+            COOKIE_FILE="/tmp/cookies.txt"
           elif [ -n "$YT_COOKIES_SECRET" ]; then
-            echo "Using cookies from YT_COOKIES secret"
+            echo "Using cookies from secret"
             printf '%s' "$YT_COOKIES_SECRET" > /tmp/cookies.txt
-            COOKIE_ARGS="--cookies /tmp/cookies.txt"
-          else
-            echo "Warning: No cookies provided. This may fail for age-restricted or geo-blocked content."
+            COOKIE_FILE="/tmp/cookies.txt"
           fi
-
-          # Extract numeric height from quality string (e.g. "2160 (4K)" -> "2160")
+          
+          # Build quality filter
+          VIDEO_QUALITY="${{ github.event.inputs.video_quality }}"
           QUALITY_NUM=$(echo "$VIDEO_QUALITY" | grep -o '[0-9]*' | head -1)
-
-          # Codec filter
-          case "$CODEC" in
-            "h264 (MP4 compatible)") CODEC_FILTER="[vcodec^=avc]" ; MERGE_FMT="mp4" ;;
-            "vp9")                   CODEC_FILTER="[vcodec^=vp9]" ; MERGE_FMT="mkv" ;;
-            "av1")                   CODEC_FILTER="[vcodec^=av01]"; MERGE_FMT="mkv" ;;
-            *)                       CODEC_FILTER=""               ; MERGE_FMT="mp4" ;;
-          esac
-
-          # Format / quality selection
+          
+          # Build format args
+          FORMAT_INPUT="${{ github.event.inputs.output_format }}"
+          AUDIO_Q="${{ github.event.inputs.audio_quality }}"
+          
           if [ "$FORMAT_INPUT" = "mp3 (audio only)" ]; then
-            FORMAT_ARGS="-x --audio-format mp3 --audio-quality ${AUDIO_Q}K"
+            FORMAT="-x --audio-format mp3 --audio-quality ${AUDIO_Q}K"
           elif [ "$FORMAT_INPUT" = "best (auto)" ] || [ "$VIDEO_QUALITY" = "best" ]; then
-            FORMAT_ARGS="-f bestvideo+bestaudio --merge-output-format mp4"
+            FORMAT="-f bestvideo+bestaudio --merge-output-format mp4"
           else
-            if [ -n "$CODEC_FILTER" ]; then
-              FORMAT_ARGS="-f bestvideo[height<=${QUALITY_NUM}]${CODEC_FILTER}+bestaudio/bestvideo[height<=${QUALITY_NUM}]+bestaudio/best[height<=${QUALITY_NUM}] --merge-output-format ${MERGE_FMT}"
-            else
-              FORMAT_ARGS="-f bestvideo[height<=${QUALITY_NUM}]+bestaudio/best[height<=${QUALITY_NUM}] --merge-output-format mp4"
-            fi
+            FORMAT="-f bestvideo[height<=${QUALITY_NUM}]+bestaudio/best[height<=${QUALITY_NUM}] --merge-output-format mp4"
           fi
-
-          # Trim / section
-          SECTION_ARGS=""
-          if [ -n "$TRIM_START" ] && [ -n "$TRIM_END" ]; then
-            SECTION_ARGS="--download-sections *${TRIM_START}-${TRIM_END} --force-keyframes-at-cuts"
-          elif [ -n "$TRIM_START" ]; then
-            SECTION_ARGS="--download-sections *${TRIM_START}-inf --force-keyframes-at-cuts"
-          elif [ -n "$TRIM_END" ]; then
-            SECTION_ARGS="--download-sections *0-${TRIM_END} --force-keyframes-at-cuts"
+          
+          # Build command
+          CMD="yt-dlp --js-runtimes node --newline"
+          CMD="$CMD --extractor-args 'youtube:player_client=web_music,web,tv'"
+          CMD="$CMD --concurrent-fragments ${{ github.event.inputs.concurrent_fragments }}"
+          CMD="$CMD $FORMAT"
+          
+          # Optional arguments
+          [ "${{ github.event.inputs.embed_chapters }}" = "true" ] && CMD="$CMD --embed-chapters"
+          [ "${{ github.event.inputs.sponsorblock }}" = "true" ] && CMD="$CMD --sponsorblock-remove sponsor,intro,outro,selfpromo,interaction"
+          [ "${{ github.event.inputs.write_description }}" = "true" ] && CMD="$CMD --write-description"
+          [ "${{ github.event.inputs.embed_metadata }}" = "true" ] && CMD="$CMD --embed-thumbnail --embed-metadata --add-metadata"
+          [ "${{ github.event.inputs.download_subtitles }}" = "true" ] && CMD="$CMD --write-subs --write-auto-subs --sub-langs ${{ github.event.inputs.subtitle_langs }}"
+          [ -n "${{ github.event.inputs.playlist_items }}" ] && CMD="$CMD --playlist-items ${{ github.event.inputs.playlist_items }}" || CMD="$CMD --no-playlist"
+          [ -n "$COOKIE_FILE" ] && CMD="$CMD --cookies $COOKIE_FILE"
+          
+          # Trim support
+          if [ -n "${{ github.event.inputs.trim_start }}" ] && [ -n "${{ github.event.inputs.trim_end }}" ]; then
+            CMD="$CMD --download-sections '*${{ github.event.inputs.trim_start }}-${{ github.event.inputs.trim_end }}' --force-keyframes-at-cuts"
+          elif [ -n "${{ github.event.inputs.trim_start }}" ]; then
+            CMD="$CMD --download-sections '*${{ github.event.inputs.trim_start }}-inf' --force-keyframes-at-cuts"
+          elif [ -n "${{ github.event.inputs.trim_end }}" ]; then
+            CMD="$CMD --download-sections '*0-${{ github.event.inputs.trim_end }}' --force-keyframes-at-cuts"
           fi
-
-          # Playlist range
-          PLAYLIST_ARGS="--no-playlist"
-          if [ -n "$PLAYLIST_ITEMS" ]; then
-            if [ "$PLAYLIST_ITEMS" = "all" ]; then
-              PLAYLIST_ARGS=""
-            else
-              PLAYLIST_ARGS="--playlist-items $PLAYLIST_ITEMS"
-            fi
-          fi
-
-          # Subtitles
-          SUBTITLE_ARGS=""
-          if [ "$SUBTITLES" = "true" ]; then
-            SUBTITLE_ARGS="--write-subs --write-auto-subs --sub-langs ${SUB_LANGS}"
-          fi
-
-          # Metadata / thumbnail embedding
-          META_ARGS=""
-          if [ "$EMBED_META" = "true" ]; then
-            META_ARGS="--embed-thumbnail --embed-metadata --add-metadata"
-          fi
-
-          # Chapter markers
-          CHAPTER_ARGS=""
-          if [ "$EMBED_CHAPTERS" = "true" ]; then
-            CHAPTER_ARGS="--embed-chapters"
-          fi
-
-          # SponsorBlock
-          SPONSOR_ARGS=""
-          if [ "$SPONSORBLOCK" = "true" ]; then
-            SPONSOR_ARGS="--sponsorblock-remove sponsor,intro,outro,selfpromo,interaction"
-          fi
-
-          # Description file
-          DESC_ARGS=""
-          if [ "$WRITE_DESC" = "true" ]; then
-            DESC_ARGS="--write-description"
-          fi
-
-          yt-dlp \
-            --js-runtimes node \
-            --newline \
-            --extractor-args "youtube:player_client=web_music,web,tv" \
-            --concurrent-fragments "${FRAGMENTS}" \
-            $FORMAT_ARGS \
-            $SECTION_ARGS \
-            $SUBTITLE_ARGS \
-            $META_ARGS \
-            $CHAPTER_ARGS \
-            $SPONSOR_ARGS \
-            $DESC_ARGS \
-            $PLAYLIST_ARGS \
-            $COOKIE_ARGS \
-            -o "$OUTPUT_FOLDER/%(title)s [%(id)s].%(ext)s" \
-            $EXTRA_ARGS \
-            -- "$URL"
+          
+          CMD="$CMD -o '$OUTPUT_FOLDER/%(title)s [%(id)s].%(ext)s'"
+          [ -n "${{ github.event.inputs.extra_args }}" ] && CMD="$CMD ${{ github.event.inputs.extra_args }}"
+          CMD="$CMD '$VIDEO_URL'"
+          
+          echo "Running: $CMD"
+          eval "$CMD"
         env:
           COOKIES_INPUT: ${{ github.event.inputs.cookies }}
           YT_COOKIES_SECRET: ${{ secrets.YT_COOKIES }}
@@ -327,6 +244,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "${{ github.event.inputs.output_folder }}/"
+          git add "${{ github.event.inputs.output_folder }}/" || true
           git commit -m "Download media [skip ci]" || echo "Nothing to commit"
-          git push
+          git push || echo "Nothing to push"
