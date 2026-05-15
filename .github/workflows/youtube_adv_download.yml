@@ -173,12 +173,10 @@ jobs:
             jq \
             aria2 \
             curl \
-            zip
+            zip \
+            python3-pip
 
-          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
-            -o /usr/local/bin/yt-dlp
-
-          sudo chmod a+rx /usr/local/bin/yt-dlp
+          python3 -m pip install -U yt-dlp bgutil-ytdlp-pot-provider
 
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
@@ -186,16 +184,26 @@ jobs:
           node-version: 20
 
       - name: 🔑 Start PO Token Provider
+        shell: bash
         run: |
-          npm install -g bgutils-ytdlp-pot-provider
+          git clone --depth 1 --branch 1.2.2 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /tmp/bgutil-ytdlp-pot-provider
 
-          nohup bgutils-ytdlp-pot-provider \
-            --port 4416 \
-            > pot.log 2>&1 &
+          cd /tmp/bgutil-ytdlp-pot-provider/server
 
-          sleep 10
+          npm install
+          npx tsc
 
-          cat pot.log || true
+          nohup node build/main.js --port 4416 > /tmp/pot.log 2>&1 &
+
+          for _ in {1..15}; do
+            if ss -ltn | grep -q ':4416 '; then
+              break
+            fi
+            sleep 2
+          done
+
+          cat /tmp/pot.log || true
+          ss -ltn | grep -q ':4416 '
 
       - name: 🍪 Create cookies file
         shell: bash
@@ -274,7 +282,8 @@ jobs:
             --cookies /tmp/cookies.txt
             --geo-bypass
             --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-            --extractor-args "youtube:player_client=android,web;po_token_provider=http://127.0.0.1:4416"
+            --extractor-args "youtube:player_client=android,web"
+            --extractor-args "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"
             --output "${OUTPUT_DIR}/%(title)s [%(id)s].%(ext)s"
             --format "${{ steps.build.outputs.yt_format }}"
           )
