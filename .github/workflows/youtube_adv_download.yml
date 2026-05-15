@@ -1,73 +1,154 @@
-name: دانلودر یوتیوب پیشرفته
+name: 🎬 Advanced YouTube Downloader Pro
 
 on:
   workflow_dispatch:
     inputs:
       video_url:
-        description: 'YouTube URL'
+        description: '🔗 YouTube URL (video/playlist/channel)'
         required: true
         type: string
+
       output_format:
-        description: 'Format'
+        description: '📦 Output format'
         required: true
         type: choice
+        default: mp4
         options:
           - mp4
+          - mkv
+          - webm
           - mp3
-          - best
-        default: 'mp4'
+          - m4a
+          - opus
+          - flac
+
       video_quality:
-        description: 'Quality'
+        description: '🎥 Video quality'
         required: false
         type: choice
+        default: '1080'
         options:
           - '2160'
+          - '1440'
           - '1080'
           - '720'
           - '480'
-          - 'best'
-        default: '1080'
+          - '360'
+          - best
+
       audio_quality:
-        description: 'Audio bitrate'
+        description: '🔊 Audio quality'
         required: false
         type: choice
+        default: '192'
         options:
           - '320'
+          - '256'
           - '192'
           - '128'
-        default: '192'
-      concurrent_fragments:
-        description: 'Parallel fragments'
+          - best
+
+      video_codec:
+        description: '🎞️ Preferred video codec'
         required: false
         type: choice
+        default: any
         options:
-          - '1'
-          - '4'
-          - '8'
-          - '16'
-        default: '4'
-      embed_chapters:
-        description: 'Embed chapters'
+          - any
+          - h264
+          - h265
+          - vp9
+          - av1
+
+      concurrent_fragments:
+        description: '⚡ Concurrent fragments'
         required: false
-        type: boolean
-        default: true
-      embed_metadata:
-        description: 'Embed metadata'
+        type: string
+        default: '8'
+
+      output_folder:
+        description: '📁 Output folder'
         required: false
-        type: boolean
-        default: true
+        type: string
+        default: downloads
+
+      trim_start:
+        description: '✂️ Trim start'
+        required: false
+        type: string
+
+      trim_end:
+        description: '✂️ Trim end'
+        required: false
+        type: string
+
+      playlist_items:
+        description: '📋 Playlist items'
+        required: false
+        type: string
+
       download_subtitles:
-        description: 'Download subtitles'
+        description: '💬 Download subtitles'
         required: false
         type: boolean
         default: false
-      output_folder:
-        description: 'Output folder'
+
+      subtitle_langs:
+        description: '🌐 Subtitle languages'
         required: false
         type: string
-        default: 'downloads'
-      cookies:
-        description: 'Cookies (Netscape format)'
+        default: en
+
+      embed_metadata:
+        description: '📝 Embed metadata'
+        required: false
+        type: boolean
+        default: true
+
+      embed_chapters:
+        description: '📑 Embed chapters'
+        required: false
+        type: boolean
+        default: true
+
+      sponsorblock:
+        description: '🚫 SponsorBlock'
+        required: false
+        type: choice
+        default: none
+        options:
+          - none
+          - sponsor
+          - intro
+          - outro
+          - selfpromo
+          - interaction
+          - all
+
+      write_description:
+        description: '📄 Write description'
+        required: false
+        type: boolean
+        default: false
+
+      max_retries:
+        description: '🔄 Max retries'
+        required: false
+        type: string
+        default: '5'
+
+      upload_mode:
+        description: '📤 Upload mode'
+        required: true
+        type: choice
+        default: artifact
+        options:
+          - artifact
+          - repository
+          - release
+
+      extra_args:
+        description: '⚙️ Extra yt-dlp args'
         required: false
         type: string
 
@@ -77,86 +158,251 @@ permissions:
 jobs:
   download:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    timeout-minutes: 120
 
     steps:
-      - uses: actions/checkout@v4
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: 🛠️ Install dependencies
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg zip
-          pip install -q -U yt-dlp
+          sudo apt-get update
 
-      - name: Download video
+          sudo apt-get install -y \
+            ffmpeg \
+            jq \
+            aria2 \
+            curl \
+            zip
+
+          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+            -o /usr/local/bin/yt-dlp
+
+          sudo chmod a+rx /usr/local/bin/yt-dlp
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 🔑 Start PO Token Provider
         run: |
-          set -x
-          
-          VIDEO_URL="${{ github.event.inputs.video_url }}"
-          OUTPUT_FOLDER="${{ github.event.inputs.output_folder }}"
-          FORMAT_TYPE="${{ github.event.inputs.output_format }}"
-          QUALITY="${{ github.event.inputs.video_quality }}"
-          AUDIO_Q="${{ github.event.inputs.audio_quality }}"
-          FRAGMENTS="${{ github.event.inputs.concurrent_fragments }}"
-          
-          mkdir -p "$OUTPUT_FOLDER"
-          
-          # Write cookies
-          if [ -n "$INPUT_COOKIES" ]; then
-            printf '%s' "$INPUT_COOKIES" > /tmp/yt_cookies.txt
-          elif [ -n "$SECRET_COOKIES" ]; then
-            printf '%s' "$SECRET_COOKIES" > /tmp/yt_cookies.txt
-          fi
-          
-          # Initialize array
-          declare -a cmd_array
-          cmd_array=("yt-dlp")
-          cmd_array+=("--newline")
-          cmd_array+=("--concurrent-fragments" "$FRAGMENTS")
-          
-          # Format selection
-          if [ "$FORMAT_TYPE" = "mp3" ]; then
-            cmd_array+=("-x" "--audio-format" "mp3" "--audio-quality" "${AUDIO_Q}K")
-          elif [ "$FORMAT_TYPE" = "best" ]; then
-            cmd_array+=("-f" "bestvideo+bestaudio" "--merge-output-format" "mp4")
+          npm install -g bgutils-ytdlp-pot-provider
+
+          nohup bgutils-ytdlp-pot-provider \
+            --port 4416 \
+            > pot.log 2>&1 &
+
+          sleep 10
+
+          cat pot.log || true
+
+      - name: 🍪 Create cookies file
+        shell: bash
+        run: |
+          cat > /tmp/cookies.txt <<'EOF'
+          ${{ secrets.YT_COOKIES }}
+          EOF
+
+          chmod 600 /tmp/cookies.txt
+
+          echo "Cookies loaded."
+
+      - name: 📁 Prepare output folder
+        run: |
+          mkdir -p "${{ github.event.inputs.output_folder }}"
+
+      - name: ⚙️ Build yt-dlp command
+        id: build
+        shell: bash
+        run: |
+          FORMAT="${{ github.event.inputs.output_format }}"
+          VIDEO_QUALITY="${{ github.event.inputs.video_quality }}"
+          AUDIO_QUALITY="${{ github.event.inputs.audio_quality }}"
+          VIDEO_CODEC="${{ github.event.inputs.video_codec }}"
+
+          YT_FORMAT="best"
+
+          if [[ "$FORMAT" == "mp4" || "$FORMAT" == "mkv" || "$FORMAT" == "webm" ]]; then
+
+            CODEC_FILTER=""
+
+            if [[ "$VIDEO_CODEC" == "h264" ]]; then
+              CODEC_FILTER="[vcodec*=avc]"
+            elif [[ "$VIDEO_CODEC" == "h265" ]]; then
+              CODEC_FILTER="[vcodec*=hevc]"
+            elif [[ "$VIDEO_CODEC" == "vp9" ]]; then
+              CODEC_FILTER="[vcodec*=vp9]"
+            elif [[ "$VIDEO_CODEC" == "av1" ]]; then
+              CODEC_FILTER="[vcodec*=av01]"
+            fi
+
+            if [[ "$VIDEO_QUALITY" == "best" ]]; then
+              YT_FORMAT="bestvideo${CODEC_FILTER}+bestaudio/best"
+            else
+              YT_FORMAT="bestvideo[height<=${VIDEO_QUALITY}]${CODEC_FILTER}+bestaudio/best[height<=${VIDEO_QUALITY}]"
+            fi
+
           else
-            cmd_array+=("-f" "bestvideo[height<=$QUALITY]+bestaudio/best" "--merge-output-format" "mp4")
+            YT_FORMAT="bestaudio"
           fi
-          
-          # Optional flags
-          if [ "${{ github.event.inputs.embed_chapters }}" = "true" ]; then
-            cmd_array+=("--embed-chapters")
-          fi
-          
-          if [ "${{ github.event.inputs.embed_metadata }}" = "true" ]; then
-            cmd_array+=("--embed-thumbnail" "--embed-metadata")
-          fi
-          
-          if [ "${{ github.event.inputs.download_subtitles }}" = "true" ]; then
-            cmd_array+=("--write-subs" "--write-auto-subs")
-          fi
-          
-          # Cookies
-          if [ -f /tmp/yt_cookies.txt ]; then
-            cmd_array+=("--cookies" "/tmp/yt_cookies.txt")
-          fi
-          
-          # Output and URL
-          cmd_array+=("-o" "$OUTPUT_FOLDER/%(title)s.%(ext)s")
-          cmd_array+=("$VIDEO_URL")
-          
-          # Execute
-          "${cmd_array[@]}"
-        
-        env:
-          INPUT_COOKIES: ${{ github.event.inputs.cookies }}
-          SECRET_COOKIES: ${{ secrets.YT_COOKIES }}
 
-      - name: Push to repo
+          echo "yt_format=$YT_FORMAT" >> "$GITHUB_OUTPUT"
+
+      - name: 🚀 Download media
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "${{ github.event.inputs.output_folder }}/" 2>/dev/null || true
-          git commit -m "Download video" 2>/dev/null || true
-          git push 2>/dev/null || true
+          OUTPUT_DIR="${{ github.event.inputs.output_folder }}"
+          FORMAT="${{ github.event.inputs.output_format }}"
+
+          CMD=(
+            yt-dlp
+            --ignore-errors
+            --continue
+            --no-overwrites
+            --newline
+            --progress
+            --concurrent-fragments "${{ github.event.inputs.concurrent_fragments }}"
+            --retries "${{ github.event.inputs.max_retries }}"
+            --fragment-retries "${{ github.event.inputs.max_retries }}"
+            --retry-sleep fragment:5
+            --sleep-requests 1
+            --sleep-interval 2
+            --max-sleep-interval 5
+            --downloader aria2c
+            --downloader-args "aria2c:-x16 -s16 -k1M"
+            --cookies /tmp/cookies.txt
+            --geo-bypass
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            --extractor-args "youtube:player_client=android,web;po_token_provider=http://127.0.0.1:4416"
+            --output "${OUTPUT_DIR}/%(title)s [%(id)s].%(ext)s"
+            --format "${{ steps.build.outputs.yt_format }}"
+          )
+
+          if [[ -n "${{ github.event.inputs.playlist_items }}" ]]; then
+            CMD+=( --playlist-items "${{ github.event.inputs.playlist_items }}" )
+          fi
+
+          if [[ "${{ github.event.inputs.download_subtitles }}" == "true" ]]; then
+            CMD+=( 
+              --write-subs
+              --sub-langs "${{ github.event.inputs.subtitle_langs }}"
+              --embed-subs
+            )
+          fi
+
+          if [[ "${{ github.event.inputs.embed_metadata }}" == "true" ]]; then
+            CMD+=( 
+              --embed-metadata
+              --embed-thumbnail
+            )
+          fi
+
+          if [[ "${{ github.event.inputs.embed_chapters }}" == "true" ]]; then
+            CMD+=( --embed-chapters )
+          fi
+
+          if [[ "${{ github.event.inputs.write_description }}" == "true" ]]; then
+            CMD+=( --write-description )
+          fi
+
+          if [[ "${{ github.event.inputs.sponsorblock }}" != "none" ]]; then
+
+            if [[ "${{ github.event.inputs.sponsorblock }}" == "all" ]]; then
+              CMD+=( --sponsorblock-remove all )
+            else
+              CMD+=( --sponsorblock-remove "${{ github.event.inputs.sponsorblock }}" )
+            fi
+
+          fi
+
+          if [[ "$FORMAT" == "mp3" || "$FORMAT" == "m4a" || "$FORMAT" == "opus" || "$FORMAT" == "flac" ]]; then
+
+            CMD+=(
+              --extract-audio
+              --audio-format "$FORMAT"
+              --audio-quality "${{ github.event.inputs.audio_quality }}"
+            )
+
+          else
+
+            CMD+=(
+              --merge-output-format "$FORMAT"
+            )
+
+          fi
+
+          if [[ -n "${{ github.event.inputs.trim_start }}" || -n "${{ github.event.inputs.trim_end }}" ]]; then
+
+            SECTION=""
+
+            if [[ -n "${{ github.event.inputs.trim_start }}" ]]; then
+              SECTION="${{ github.event.inputs.trim_start }}"
+            fi
+
+            SECTION="${SECTION}-"
+
+            if [[ -n "${{ github.event.inputs.trim_end }}" ]]; then
+              SECTION="${SECTION}${{ github.event.inputs.trim_end }}"
+            fi
+
+            CMD+=( --download-sections "*${SECTION}" )
+          fi
+
+          if [[ -n "${{ github.event.inputs.extra_args }}" ]]; then
+            EXTRA_ARGS="${{ github.event.inputs.extra_args }}"
+            read -ra EXTRA <<< "$EXTRA_ARGS"
+            CMD+=( "${EXTRA[@]}" )
+          fi
+
+          CMD+=( "${{ github.event.inputs.video_url }}" )
+
+          echo "Running yt-dlp..."
+          printf '%q ' "${CMD[@]}"
+          echo
+
+          "${CMD[@]}"
+
+      - name: 📂 Show downloaded files
+        run: |
+          echo "Downloaded files:"
+          find "${{ github.event.inputs.output_folder }}" -type f || true
+
+      - name: 📦 Upload artifact
+        if: github.event.inputs.upload_mode == 'artifact'
+        uses: actions/upload-artifact@v4
+        with:
+          name: downloaded-media
+          path: ${{ github.event.inputs.output_folder }}/**
+          retention-days: 7
+
+      - name: 📤 Push files to repository
+        if: github.event.inputs.upload_mode == 'repository'
+        shell: bash
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          mkdir -p media
+
+          cp -r "${{ github.event.inputs.output_folder }}/." media/ || true
+
+          git add media
+
+          git commit -m "Add downloaded media" || echo "No changes to commit"
+
+          git push
+
+      - name: 🗜️ Create release archive
+        if: github.event.inputs.upload_mode == 'release'
+        run: |
+          cd "${{ github.event.inputs.output_folder }}"
+          zip -r ../downloaded-media.zip .
+
+      - name: 🚀 Upload GitHub Release
+        if: github.event.inputs.upload_mode == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: download-${{ github.run_number }}
+          name: Download ${{ github.run_number }}
+          files: downloaded-media.zip
