@@ -91,53 +91,64 @@ jobs:
 
       - name: Download video
         run: |
+          set -x
+          
           VIDEO_URL="${{ github.event.inputs.video_url }}"
           OUTPUT_FOLDER="${{ github.event.inputs.output_folder }}"
+          FORMAT_TYPE="${{ github.event.inputs.output_format }}"
+          QUALITY="${{ github.event.inputs.video_quality }}"
+          AUDIO_Q="${{ github.event.inputs.audio_quality }}"
+          FRAGMENTS="${{ github.event.inputs.concurrent_fragments }}"
           
           mkdir -p "$OUTPUT_FOLDER"
           
-          # Handle cookies
-          COOKIE_FILE=""
+          # Write cookies
           if [ -n "$INPUT_COOKIES" ]; then
-            echo "Writing cookies from input"
             printf '%s' "$INPUT_COOKIES" > /tmp/yt_cookies.txt
-            COOKIE_FILE="/tmp/yt_cookies.txt"
           elif [ -n "$SECRET_COOKIES" ]; then
-            echo "Writing cookies from secret"
             printf '%s' "$SECRET_COOKIES" > /tmp/yt_cookies.txt
-            COOKIE_FILE="/tmp/yt_cookies.txt"
           fi
           
-          # Build command
-          CMD="yt-dlp"
-          CMD="$CMD --newline"
-          CMD="$CMD --concurrent-fragments ${{ github.event.inputs.concurrent_fragments }}"
+          # Initialize array
+          declare -a cmd_array
+          cmd_array=("yt-dlp")
+          cmd_array+=("--newline")
+          cmd_array+=("--concurrent-fragments" "$FRAGMENTS")
           
-          # Format
-          if [ "${{ github.event.inputs.output_format }}" = "mp3" ]; then
-            CMD="$CMD -x --audio-format mp3 --audio-quality ${{ github.event.inputs.audio_quality }}K"
-          elif [ "${{ github.event.inputs.output_format }}" = "best" ]; then
-            CMD="$CMD -f bestvideo+bestaudio --merge-output-format mp4"
+          # Format selection
+          if [ "$FORMAT_TYPE" = "mp3" ]; then
+            cmd_array+=("-x" "--audio-format" "mp3" "--audio-quality" "${AUDIO_Q}K")
+          elif [ "$FORMAT_TYPE" = "best" ]; then
+            cmd_array+=("-f" "bestvideo+bestaudio" "--merge-output-format" "mp4")
           else
-            CMD="$CMD -f bestvideo[height<=${{ github.event.inputs.video_quality }}]+bestaudio/best --merge-output-format mp4"
+            cmd_array+=("-f" "bestvideo[height<=$QUALITY]+bestaudio/best" "--merge-output-format" "mp4")
           fi
           
-          # Options
-          [ "${{ github.event.inputs.embed_chapters }}" = "true" ] && CMD="$CMD --embed-chapters"
-          [ "${{ github.event.inputs.embed_metadata }}" = "true" ] && CMD="$CMD --embed-thumbnail --embed-metadata"
-          [ "${{ github.event.inputs.download_subtitles }}" = "true" ] && CMD="$CMD --write-subs --write-auto-subs"
+          # Optional flags
+          if [ "${{ github.event.inputs.embed_chapters }}" = "true" ]; then
+            cmd_array+=("--embed-chapters")
+          fi
+          
+          if [ "${{ github.event.inputs.embed_metadata }}" = "true" ]; then
+            cmd_array+=("--embed-thumbnail" "--embed-metadata")
+          fi
+          
+          if [ "${{ github.event.inputs.download_subtitles }}" = "true" ]; then
+            cmd_array+=("--write-subs" "--write-auto-subs")
+          fi
           
           # Cookies
-          if [ -f "$COOKIE_FILE" ]; then
-            CMD="$CMD --cookies $COOKIE_FILE"
+          if [ -f /tmp/yt_cookies.txt ]; then
+            cmd_array+=("--cookies" "/tmp/yt_cookies.txt")
           fi
           
           # Output and URL
-          CMD="$CMD -o \"$OUTPUT_FOLDER/%(title)s.%(ext)s\""
-          CMD="$CMD \"$VIDEO_URL\""
+          cmd_array+=("-o" "$OUTPUT_FOLDER/%(title)s.%(ext)s")
+          cmd_array+=("$VIDEO_URL")
           
-          echo "Running: $CMD"
-          eval "$CMD"
+          # Execute
+          "${cmd_array[@]}"
+        
         env:
           INPUT_COOKIES: ${{ github.event.inputs.cookies }}
           SECRET_COOKIES: ${{ secrets.YT_COOKIES }}
@@ -147,5 +158,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "${{ github.event.inputs.output_folder }}/" 2>/dev/null || true
-          git commit -m "Download: ${{ github.event.inputs.video_url }}" || true
-          git push || true
+          git commit -m "Download video" 2>/dev/null || true
+          git push 2>/dev/null || true
