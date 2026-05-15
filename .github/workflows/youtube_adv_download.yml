@@ -282,7 +282,9 @@ jobs:
             --cookies /tmp/cookies.txt
             --geo-bypass
             --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-            --extractor-args "youtube:player_client=android,web"
+            --js-runtimes node
+            --remote-components ejs:github
+            --extractor-args "youtube:player_client=mweb"
             --extractor-args "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"
             --output "${OUTPUT_DIR}/%(title)s [%(id)s].%(ext)s"
             --format "${{ steps.build.outputs.yt_format }}"
