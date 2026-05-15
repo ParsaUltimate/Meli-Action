@@ -40,7 +40,7 @@ on:
         description: '🔊 Audio quality'
         required: false
         type: choice
-        default: '192'
+        default: '320'
         options:
           - '320'
           - '256'
@@ -91,7 +91,7 @@ on:
         description: '💬 Download subtitles'
         required: false
         type: boolean
-        default: false
+        default: true
 
       subtitle_langs:
         description: '🌐 Subtitle languages'
@@ -129,7 +129,7 @@ on:
         description: '📄 Write description'
         required: false
         type: boolean
-        default: false
+        default: true
 
       max_retries:
         description: '🔄 Max retries'
@@ -141,7 +141,7 @@ on:
         description: '📤 Upload mode'
         required: true
         type: choice
-        default: artifact
+        default: release
         options:
           - artifact
           - repository
