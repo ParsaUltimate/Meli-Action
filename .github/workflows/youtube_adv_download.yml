@@ -370,7 +370,23 @@ jobs:
           printf '%q ' "${CMD[@]}"
           echo
 
-          "${CMD[@]}"
+          if ! "${CMD[@]}"; then
+            echo "Primary format request failed; retrying with fallback format 'best'."
+
+            FALLBACK_CMD=("${CMD[@]}")
+
+            for i in "${!FALLBACK_CMD[@]}"; do
+              if [[ "${FALLBACK_CMD[$i]}" == "--format" ]]; then
+                FALLBACK_CMD[$((i + 1))]="best"
+                break
+              fi
+            done
+
+            printf '%q ' "${FALLBACK_CMD[@]}"
+            echo
+
+            "${FALLBACK_CMD[@]}"
+          fi
 
       - name: 📂 Show downloaded files
         run: |
